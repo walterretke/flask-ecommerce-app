@@ -3,16 +3,20 @@ from flask import Flask, request, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from flask_cors import CORS
-from flask_login import UserMixin
+from flask_login import UserMixin, login_user, LoginManager, login_required, logout_user
 
 #criacao do app
 app = Flask(__name__)
 
 #database config e conexao
+app.config['SECRET_KEY'] = "minha_chave_123"
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///ecommerce.db'
 
+login_manager = LoginManager()
 db = SQLAlchemy(app)
-CORS
+login_manager.init_app(app)
+login_manager.login_view = 'login'
+CORS(app)
 migrate = Migrate(app, db)
 
 #modelagem
@@ -24,6 +28,24 @@ class User(db.Model, UserMixin):
     username = db.Column(db.String(80), nullable=False, unique=True)
     password = db.Column(db.String(80), nullable=False)
 
+#rotas
+
+@app.route('/login', methods=["POST"])
+def app_login():
+    data = request.json
+
+    user = User.query.filter_by(username=data.get("username")).first()
+    if user and data.get("password") == user.password:
+            login_user(user)
+            return jsonify({"message": "Logged in successfully"}), 200
+    return jsonify({"message": "User not found"}), 404
+
+@app.route('/logout', methods=["POST"])
+@login_required
+def app_logout():
+    logout_user()
+    return jsonify({"message": "Logout in successfully"}), 200
+
 #produto(id, name, price, descritpion)
 
 class Product(db.Model):
@@ -34,8 +56,13 @@ class Product(db.Model):
 
 #rotas (/api/modelousado/funcao)
 
+#autenticaco
+@login_manager.user_loader
+def load_user(user_id):
+    return User.query.get(int(user_id))
     # ADD
 @app.route('/api/product/add', methods=["POST"])
+@login_required
 def add_new_product():
     data = request.json
     if 'name' in data and 'price' in data:
@@ -47,6 +74,7 @@ def add_new_product():
 
     #DELETE
 @app.route('/api/product/delete/<int:product_id>', methods=["DELETE"])
+@login_required
 def delete_product(product_id):
     product = Product.query.get(product_id)
     if product:
@@ -70,6 +98,7 @@ def get_product_details(product_id):
 
     #UPDATE
 @app.route('/api/product/update/<int:product_id>', methods=["PUT"])
+@login_required
 def update_product(product_id):
     product = Product.query.get(product_id)
     if not product:
